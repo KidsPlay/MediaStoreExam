@@ -24,7 +24,7 @@ fun audioTypeAdapterDelegates(itemClickListener: (AudioType) -> Unit) =
             itemClickListener(this.item)
         }
         bind {
-            binding.tvAudioType.text = item.name
+            binding.tvAudioType.text = item.type.name
         }
     }
 

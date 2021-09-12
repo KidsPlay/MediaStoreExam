@@ -6,7 +6,15 @@ import kotlinx.android.parcel.Parcelize
 
 @Parcelize
 data class AudioType(
-    val name: String,
+    val type: Type,
     val uri: Uri,
     val selection: String? = null
-) : DisplayableItem, Parcelable
+) : DisplayableItem, Parcelable {
+
+    enum class Type(name: String) {
+        Ringtone("Ringtones"),
+        Notification("Notifications"),
+        Mp3("mp3"),
+        Music("music")
+    }
+}

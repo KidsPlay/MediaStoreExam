@@ -4,10 +4,7 @@ import android.app.Application
 import android.content.ContentUris
 import android.content.Context
 import android.database.Cursor
-import android.media.AudioManager
-import android.media.MediaPlayer
-import android.media.Ringtone
-import android.media.RingtoneManager
+import android.media.*
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -39,9 +36,43 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun loadAudios(audioType: AudioType) {
         viewModelScope.launch {
-            val audioList = queryAudios(audioType)
+            val audioList = when (audioType.type) {
+                AudioType.Type.Ringtone -> {
+                    fetchSounds(getApplication(), RingtoneManager.TYPE_RINGTONE)
+                }
+                AudioType.Type.Notification -> {
+                    fetchSounds(getApplication(), RingtoneManager.TYPE_NOTIFICATION)
+                }
+                else -> {
+                    queryAudios(audioType)
+                }
+            }
             _audios.postValue(audioList)
         }
+    }
+
+    /**
+     * @param context [Context]
+     * @param type    <br></br>
+     * RingtoneManager.TYPE_RINGTONE <br></br>
+     * RingtoneManager.TYPE_ALARM <br></br>
+     * RingtoneManager.TYPE_NOTIFICATION <br></br>
+     * RingtoneManager.TYPE_ALL
+     * @return Obj_Sounds List
+     */
+    private fun fetchSounds(context: Context, type: Int): List<AudioItem> {
+        val manager = RingtoneManager(context)
+        manager.setType(type)
+        val cursor = manager.cursor
+        val ringtones = mutableListOf<AudioItem>()
+        while (cursor.moveToNext()) {
+            val id = cursor.getLong(RingtoneManager.ID_COLUMN_INDEX);
+            val title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX)
+            val uri = manager.getRingtoneUri(cursor.position)
+            val obj = AudioItem(id, title, Date(), uri)
+            ringtones.add(obj)
+        }
+        return ringtones
     }
 
     private suspend fun queryAudios(audioType: AudioType): List<AudioItem> {
@@ -111,11 +142,29 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
         releaseAudio()
 
         mediaPlayer = MediaPlayer().apply {
-            setAudioStreamType(AudioManager.STREAM_MUSIC)
-//            setDataSource(getApplication(), audioItem.contentUri)
-            setMediaPlayerDataSource(getApplication(), this, audioItem.toString())
-            prepare() // might take long! (for buffering, etc)
-            start()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                setAudioAttributes(
+                    AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build()
+                )
+            } else {
+                setAudioStreamType(AudioManager.STREAM_MUSIC)
+            }
+            try {
+                setDataSource(getApplication(), audioItem.contentUri)
+            } catch (e: Exception) {
+                setMediaPlayerDataSource(getApplication(), this, audioItem.toString())
+            }
+
+            setOnErrorListener { mp, what, extra ->
+                Log.d(TAG, "what = $what")
+                Log.d(TAG, "extra = $extra")
+                release()
+                true
+            }
+            setOnPreparedListener {
+                it.start()
+            }
+            prepareAsync()
         }
     }
 

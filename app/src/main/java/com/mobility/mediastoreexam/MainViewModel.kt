@@ -19,24 +19,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun initAudioTypes() {
         val list = mutableListOf<AudioType>()
         list += AudioType(
-            "Ringtones",
+            AudioType.Type.Ringtone,
             MediaStore.Audio.Media.INTERNAL_CONTENT_URI,
             "${MediaStore.Audio.Media.IS_RINGTONE} != 0"
         )
 
         list += AudioType(
-            "Notifications",
+            AudioType.Type.Notification,
             MediaStore.Audio.Media.INTERNAL_CONTENT_URI,
             "${MediaStore.Audio.Media.IS_NOTIFICATION} != 0"
         )
 
         list += AudioType(
-            "mp3", MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+            AudioType.Type.Mp3,
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             "${MediaStore.Audio.Media.DISPLAY_NAME} like '%.mp3'"
         )
 
         list += AudioType(
-            "Musics",
+            AudioType.Type.Music,
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
             "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         )
