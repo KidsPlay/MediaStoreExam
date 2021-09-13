@@ -24,7 +24,7 @@ fun audioTypeAdapterDelegates(itemClickListener: (AudioType) -> Unit) =
             itemClickListener(this.item)
         }
         bind {
-            binding.tvAudioType.text = item.type.name
+            binding.tvAudioType.text = item.name
         }
     }
 
@@ -36,12 +36,12 @@ fun audioAdapterDelegates(onClickAudioListener: OnClickAudioListener) =
         { layoutInflater, root -> ListItemAudioBinding.inflate(layoutInflater, root, false) }
     ) {
         binding.tvAudio.setOnClickListener {
-            Log.d("Click", "Click ${item.displayName}")
+            Log.d("Click", "Click ${item.title}")
             onClickAudioListener(item)
         }
 
         bind {
-            binding.tvAudio.text = item.displayName
+            binding.tvAudio.text = item.title
 //                "${item.id} / ${item.displayName} / ${item.dateAdded} / ${item.contentUri}"
         }
     }

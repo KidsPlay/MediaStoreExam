@@ -4,7 +4,10 @@ import android.app.Application
 import android.content.ContentUris
 import android.content.Context
 import android.database.Cursor
-import android.media.*
+import android.media.AudioAttributes
+import android.media.AudioManager
+import android.media.MediaPlayer
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -20,8 +23,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
-import java.util.*
-import java.util.concurrent.TimeUnit
 
 
 class AudioListViewModel(application: Application) : AndroidViewModel(application) {
@@ -36,15 +37,18 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun loadAudios(audioType: AudioType) {
         viewModelScope.launch {
-            val audioList = when (audioType.type) {
-                AudioType.Type.Ringtone -> {
-                    fetchSounds(getApplication(), RingtoneManager.TYPE_RINGTONE)
+            val audioList = when (audioType) {
+                AudioType.Ringtone -> {
+                    fetchSoundsFromRingtoneManager(getApplication(), RingtoneManager.TYPE_RINGTONE)
                 }
-                AudioType.Type.Notification -> {
-                    fetchSounds(getApplication(), RingtoneManager.TYPE_NOTIFICATION)
+                AudioType.Notification -> {
+                    fetchSoundsFromRingtoneManager(
+                        getApplication(),
+                        RingtoneManager.TYPE_NOTIFICATION
+                    )
                 }
                 else -> {
-                    queryAudios(audioType)
+                    fetchSoundsFromContentResolver(audioType)
                 }
             }
             _audios.postValue(audioList)
@@ -60,41 +64,47 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
      * RingtoneManager.TYPE_ALL
      * @return Obj_Sounds List
      */
-    private fun fetchSounds(context: Context, type: Int): List<AudioItem> {
-        val manager = RingtoneManager(context)
-        manager.setType(type)
-        val cursor = manager.cursor
-        val ringtones = mutableListOf<AudioItem>()
-        while (cursor.moveToNext()) {
-            val id = cursor.getLong(RingtoneManager.ID_COLUMN_INDEX);
-            val title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX)
-            val uri = manager.getRingtoneUri(cursor.position)
-            val obj = AudioItem(id, title, Date(), uri)
-            ringtones.add(obj)
-        }
-        return ringtones
-    }
-
-    private suspend fun queryAudios(audioType: AudioType): List<AudioItem> {
-        val audios = mutableListOf<AudioItem>()
+    private suspend fun fetchSoundsFromRingtoneManager(
+        context: Context,
+        type: Int
+    ): List<AudioItem> {
+        val sounds = mutableListOf<AudioItem>()
 
         withContext(Dispatchers.IO) {
+            val manager = RingtoneManager(context).apply {
+                setType(type)
+            }
+
+            manager.cursor.let { cursor ->
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(RingtoneManager.ID_COLUMN_INDEX);
+                    val title = cursor.getString(RingtoneManager.TITLE_COLUMN_INDEX)
+                    val uri = manager.getRingtoneUri(cursor.position)
+                    sounds.add(AudioItem(id, title, uri))
+                }
+            }
+        }
+
+        return sounds
+    }
+
+    private suspend fun fetchSoundsFromContentResolver(audioType: AudioType): List<AudioItem> {
+        val sounds = mutableListOf<AudioItem>()
+
+        withContext(Dispatchers.IO) {
+            val uri = getUri(audioType)
+
             val projection = arrayOf(
                 MediaStore.Audio.Media._ID,
-                MediaStore.Audio.Media.DATE_ADDED,
+                MediaStore.Audio.Media.TITLE,
                 MediaStore.Audio.Media.DISPLAY_NAME,
             )
 
-            val selection = if (audioType.selection.isNullOrEmpty()) {
-                null
-            } else {
-                "${audioType.selection} != 0"
-            }
-
+            val selection = getSelection(audioType)
             val sortOrder = "${MediaStore.Audio.Media.DISPLAY_NAME} asc"
 
             getApplication<Application>().contentResolver.query(
-                audioType.uri,
+                uri,
                 projection,
                 selection,
                 null,
@@ -102,8 +112,7 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
             )?.use { cursor ->
 
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val dateModifiedColumn =
-                    cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+                val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
                 val displayNameColumn =
                     cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
 
@@ -112,22 +121,15 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
 
                     // Here we'll use the column indexs that we found above.
                     val id = cursor.getLong(idColumn)
-                    val dateModified =
-                        Date(TimeUnit.SECONDS.toMillis(cursor.getLong(dateModifiedColumn)))
+                    val title = cursor.getString(titleColumn)
                     val displayName = cursor.getString(displayNameColumn)
-
                     val contentUri = ContentUris.withAppendedId(
                         MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                         id
                     )
 
-                    val audio = AudioItem(
-                        id,
-                        displayName,
-                        dateModified,
-                        contentUri
-                    )
-                    audios += audio
+                    val audio = AudioItem(id, displayName, contentUri)
+                    sounds += audio
 
                     // For debugging, we'll output the image objects we create to logcat.
                     Log.v(TAG, "Added audio: $audio")
@@ -135,7 +137,26 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
 
-        return audios
+        return sounds
+    }
+
+    private fun getUri(type: AudioType): Uri {
+        return when (type) {
+            AudioType.Ringtone,
+            AudioType.Notification -> MediaStore.Audio.Media.INTERNAL_CONTENT_URI
+
+            AudioType.Mp3,
+            AudioType.Music -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
+    }
+
+    private fun getSelection(type: AudioType): String {
+        return when (type) {
+            AudioType.Ringtone -> "${MediaStore.Audio.Media.IS_RINGTONE} != 0"
+            AudioType.Notification -> "${MediaStore.Audio.Media.IS_NOTIFICATION} != 0"
+            AudioType.Mp3 -> "${MediaStore.Audio.Media.DISPLAY_NAME} like '%.mp3'"
+            AudioType.Music -> "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        }
     }
 
     fun playAudio(audioItem: AudioItem) {
@@ -171,21 +192,6 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
     fun releaseAudio() {
         mediaPlayer?.release()
         mediaPlayer = null
-    }
-
-    private var ringtone: Ringtone? = null
-
-    fun playRingtone(audioItem: AudioItem) {
-        releaseRingtone()
-
-        ringtone = RingtoneManager.getRingtone(getApplication(), audioItem.contentUri).apply {
-            play()
-        }
-    }
-
-    fun releaseRingtone() {
-        ringtone?.stop()
-        ringtone = null
     }
 
     @Throws(Exception::class)

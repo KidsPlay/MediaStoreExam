@@ -13,56 +13,6 @@ import com.mobility.mediastoreexam.model.AudioType
 
 class AudioListActivity : AppCompatActivity() {
 
-    private val viewModel: AudioListViewModel by viewModels()
-    private lateinit var binding: ActivityAudioListBinding
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        binding = DataBindingUtil.setContentView(this, R.layout.activity_audio_list)
-
-        val audioType =
-            if (savedInstanceState == null) {
-                intent.getParcelableExtra<AudioType>(EXTRA_AUDIO_TYPE)
-            } else {
-                savedInstanceState.getParcelable(EXTRA_AUDIO_TYPE)
-            }
-
-        viewModel.loadAudios(audioType!!)
-
-        initRecyclerView()
-        observeLiveDatas()
-    }
-
-    private lateinit var adapter: AudioListAdapter
-
-    private fun initRecyclerView() {
-        adapter = AudioListAdapter {
-            viewModel.playAudio(it)
-//            viewModel.playRingtone(it)
-        }
-
-        binding.recyclerView.addItemDecoration(
-            DividerItemDecoration(
-                this,
-                DividerItemDecoration.VERTICAL
-            )
-        )
-        binding.recyclerView.adapter = adapter
-    }
-
-    private fun observeLiveDatas() {
-        viewModel.audios.observe(this) {
-            adapter.items = it
-            adapter.notifyDataSetChanged()
-        }
-    }
-
-    override fun onDestroy() {
-        viewModel.releaseAudio()
-        viewModel.releaseRingtone()
-        super.onDestroy()
-    }
-
     companion object {
         private const val EXTRA_AUDIO_TYPE = "extraAudioType"
 
@@ -71,5 +21,50 @@ class AudioListActivity : AppCompatActivity() {
                 putExtra(EXTRA_AUDIO_TYPE, audioType)
             }
         }
+    }
+
+    private lateinit var binding: ActivityAudioListBinding
+    private lateinit var adapter: AudioListAdapter
+
+    private val viewModel: AudioListViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = DataBindingUtil.setContentView(this, R.layout.activity_audio_list)
+
+        val audioType =
+            if (savedInstanceState == null) {
+                intent.getSerializableExtra(EXTRA_AUDIO_TYPE)
+            } else {
+                savedInstanceState.getSerializable(EXTRA_AUDIO_TYPE)
+            }
+
+        setupRecyclerView()
+        observeEvents()
+
+        viewModel.loadAudios(audioType as AudioType)
+    }
+
+    private fun setupRecyclerView() {
+        adapter = AudioListAdapter {
+            viewModel.playAudio(it)
+        }
+
+        binding.recyclerView.addItemDecoration(
+            DividerItemDecoration(this, DividerItemDecoration.VERTICAL)
+        )
+        binding.recyclerView.adapter = adapter
+    }
+
+    private fun observeEvents() {
+        viewModel.audios.observe(this) {
+            adapter.items = it
+            adapter.notifyDataSetChanged()
+        }
+    }
+
+    override fun onDestroy() {
+        viewModel.releaseAudio()
+        super.onDestroy()
     }
 }

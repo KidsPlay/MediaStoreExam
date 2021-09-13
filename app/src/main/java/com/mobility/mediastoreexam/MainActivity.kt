@@ -10,31 +10,31 @@ import com.mobility.mediastoreexam.ui.list.AudioListActivity
 
 class MainActivity : AppCompatActivity() {
 
-    private val viewModel: MainViewModel by viewModels()
     private lateinit var binding: ActivityMainBinding
-
     private lateinit var mainListAdapter: MainListAdapter
+
+    private val viewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = DataBindingUtil.setContentView(this, R.layout.activity_main)
 
+        setupRecyclerView()
+        observeEvents()
+    }
+
+    private fun setupRecyclerView() {
         mainListAdapter = MainListAdapter { audioType ->
             startActivity(AudioListActivity.newIntent(this, audioType))
         }
 
         binding.recyclerView.addItemDecoration(
-            DividerItemDecoration(
-                this,
-                DividerItemDecoration.VERTICAL
-            )
+            DividerItemDecoration(this, DividerItemDecoration.VERTICAL)
         )
         binding.recyclerView.adapter = mainListAdapter
-
-        observeLiveDatas()
     }
 
-    private fun observeLiveDatas() {
+    private fun observeEvents() {
         viewModel.audioTypes.observe(this) {
             mainListAdapter.items = it
             mainListAdapter.notifyDataSetChanged()
