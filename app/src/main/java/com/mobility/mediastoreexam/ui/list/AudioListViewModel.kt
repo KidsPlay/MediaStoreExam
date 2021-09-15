@@ -12,6 +12,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
+import android.webkit.MimeTypeMap
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -66,7 +67,7 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
      */
     private suspend fun fetchSoundsFromRingtoneManager(
         context: Context,
-        type: Int
+        type: Int,
     ): List<AudioItem> {
         val sounds = mutableListOf<AudioItem>()
 
@@ -101,13 +102,14 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
             )
 
             val selection = getSelection(audioType)
-            val sortOrder = "${MediaStore.Audio.Media.DISPLAY_NAME} asc"
+            val selectionArgs = getSelectionArgs(audioType)
+            val sortOrder = "${MediaStore.Audio.Media.DISPLAY_NAME} ASC"
 
             getApplication<Application>().contentResolver.query(
                 uri,
                 projection,
                 selection,
-                null,
+                selectionArgs,
                 sortOrder
             )?.use { cursor ->
 
@@ -143,19 +145,29 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
     private fun getUri(type: AudioType): Uri {
         return when (type) {
             AudioType.Ringtone,
-            AudioType.Notification -> MediaStore.Audio.Media.INTERNAL_CONTENT_URI
+            AudioType.Notification,
+            -> MediaStore.Audio.Media.INTERNAL_CONTENT_URI
 
             AudioType.Mp3,
-            AudioType.Music -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            AudioType.Music,
+            -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         }
     }
 
     private fun getSelection(type: AudioType): String {
         return when (type) {
-            AudioType.Ringtone -> "${MediaStore.Audio.Media.IS_RINGTONE} != 0"
-            AudioType.Notification -> "${MediaStore.Audio.Media.IS_NOTIFICATION} != 0"
-            AudioType.Mp3 -> "${MediaStore.Audio.Media.DISPLAY_NAME} like '%.mp3'"
-            AudioType.Music -> "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+            AudioType.Ringtone -> "${MediaStore.Audio.Media.IS_RINGTONE} != ?"
+            AudioType.Notification -> "${MediaStore.Audio.Media.IS_NOTIFICATION} != ?"
+            AudioType.Mp3 -> "${MediaStore.Audio.Media.MIME_TYPE} = ?"
+            AudioType.Music -> "${MediaStore.Audio.Media.IS_MUSIC} != ?"
+        }
+    }
+
+    private fun getSelectionArgs(audioType: AudioType): Array<String>? {
+        return when (audioType) {
+            AudioType.Mp3 -> MimeTypeMap.getSingleton().getMimeTypeFromExtension("mp3")
+                ?.let { arrayOf(it) }
+            else -> arrayOf("0")
         }
     }
 
@@ -197,7 +209,8 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
     @Throws(Exception::class)
     fun setMediaPlayerDataSource(
         context: Context,
-        mp: MediaPlayer, fileInfo: String
+        mp: MediaPlayer,
+        fileInfo: String,
     ) {
         var fileInfo = fileInfo
         if (fileInfo.startsWith("content://")) {
@@ -230,7 +243,8 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
     @Throws(Exception::class)
     private fun setMediaPlayerDataSourcePreHoneyComb(
         context: Context,
-        mp: MediaPlayer, fileInfo: String
+        mp: MediaPlayer,
+        fileInfo: String,
     ) {
         mp.reset()
         mp.setDataSource(fileInfo)
@@ -239,7 +253,8 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
     @Throws(Exception::class)
     private fun setMediaPlayerDataSourcePostHoneyComb(
         context: Context,
-        mp: MediaPlayer, fileInfo: String
+        mp: MediaPlayer,
+        fileInfo: String,
     ) {
         mp.reset()
         mp.setDataSource(context, Uri.parse(Uri.encode(fileInfo)))
@@ -247,7 +262,7 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
 
     @Throws(Exception::class)
     private fun setMediaPlayerDataSourceUsingFileDescriptor(
-        context: Context, mp: MediaPlayer, fileInfo: String
+        context: Context, mp: MediaPlayer, fileInfo: String,
     ) {
         val file = File(fileInfo)
         val inputStream = FileInputStream(file)
@@ -281,7 +296,7 @@ class AudioListViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun getRingtonePathFromContentUri(
         context: Context,
-        contentUri: Uri
+        contentUri: Uri,
     ): String {
         val proj = arrayOf(MediaStore.Audio.Media.DATA)
         val ringtoneCursor: Cursor = context.contentResolver.query(
